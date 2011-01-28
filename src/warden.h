@@ -4,13 +4,16 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <algorithm>
+#include <stdlib.h>
 
 using std::string;
 using std::vector;
 using std::map;
 
-class Warden {
-    public:
+class Warden
+{
+public:
 	static Warden *Instance();
 	string eval(string msg);
 	string load(string file);
@@ -19,14 +22,14 @@ class Warden {
 	string help(string file);
 	void quit();
 	~Warden();
-    private:
-	Warden(){};
+private:
+	Warden() {};
 	Warden(const Warden &);
 	Warden& operator=(const Warden &);
 
 	string format_message(string str);
 	string parse_message(string str);
-	void insert_rule(){};
+	void insert_rule() {};
 
 	string message;
 };
