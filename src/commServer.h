@@ -8,23 +8,24 @@
 
 #define TERM '\n'
 
-class commServer {
+class commServer
+{
 
- private:
-  char *host;
-  int port;
-  int sock;
+private:
+	char *host;
+	int port;
+	int sock;
 
- public:
-  commServer(char *, int);
-  ~commServer();
+public:
+	commServer(char *, int);
+	~commServer();
 
-  const char *get_host();
-  int get_port();
-  int get_sock();
+	const char *get_host();
+	int get_port();
+	int get_sock();
 
-  int send_msg( int sock, unsigned char len, const char *p );
-  int read_msg( int sock, unsigned char len, char **p );
+	int send_msg( int sock, unsigned char len, const char *p );
+	int read_msg( int sock, unsigned char len, char **p );
 
 }; // end of commServer class
 

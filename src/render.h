@@ -5,9 +5,10 @@
 #include <fstream>
 #include <cstring>
 #include <ctime>
+#include <stdlib.h>
 #include <regex.h>
 #include <signal.h>
-#include <ncurses.h>
+#include <ncursesw/ncurses.h>
 #include <string>
 #include <queue>
 #include <pthread.h>
@@ -27,12 +28,13 @@
 
 using namespace std;
 
-struct thread_args{
-  bool interactive;
-  bool log_enabled;
-  char logfile[32];
-  char ip[16];
-  int port;
+struct thread_args
+{
+	bool interactive;
+	bool log_enabled;
+	char logfile[32];
+	char ip[16];
+	int port;
 };
 
 string construct_msg(string type, string message, long robot_id, string name);

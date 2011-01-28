@@ -5,16 +5,19 @@
 #include <vector>
 #include <map>
 
-extern "C" {                                                                    
-#include <lua.h>                                                                
-#include <lualib.h>                                                             
-#include <lauxlib.h>                                                            
+extern "C" {
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 }
+
+#define PLUGIN_DIR	"./plugins/"
 
 using namespace::std;
 
-class PluginManager {
-    public:
+class PluginManager
+{
+public:
 	static PluginManager *Instance();
 	string load(string filename);
 	string unload(string filename);
@@ -26,8 +29,8 @@ class PluginManager {
 	void report_errors(lua_State *L, int status);
 	~PluginManager();
 
-    private:
-	PluginManager(){};
+private:
+	PluginManager() {};
 	PluginManager(const PluginManager &);
 	PluginManager& operator=(const PluginManager &);
 

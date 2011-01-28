@@ -1,4 +1,4 @@
-/** 
+/**
  * server.cpp
  *
  * server skeleton with threads
@@ -54,9 +54,10 @@ int num_threads = 0;
 // display_usage: Displays the program usage
 // Parameters:
 // name - name of running process
-void display_usage(char *name){
-  cerr << name << " [-t] [-l logfile] [-b ip address] [-p port]" << endl;
-  exit(1);
+void display_usage(char *name)
+{
+	cerr << name << " [-t] [-l logfile] [-b ip address] [-p port]" << endl;
+	exit(1);
 }
 
 /**
@@ -66,669 +67,858 @@ void display_usage(char *name){
  * If it is found in the list, it returns true, and iter is
  * a valid iterator to the robot; otherwise it returns false.
  */
-bool find_robot( int session_id, list<robot_p>::iterator& iter ) {
-  bool found = false;
-  pthread_mutex_lock( &robots_mutex );
-  for (list<robot_p>::iterator i = robots.begin();
-       !found && i != robots.end(); ++i) {
-    if ( ((*i)->get_session_id()) == session_id ) {
-      found = true;
-      iter = i;
-    }
-  }
-  pthread_mutex_unlock( &robots_mutex );
-  return found;
+bool find_robot( int session_id, list<robot_p>::iterator& iter )
+{
+	bool found = false;
+	pthread_mutex_lock( &robots_mutex );
+	for (list<robot_p>::iterator i = robots.begin();
+			!found && i != robots.end(); ++i)
+	{
+		if ( ((*i)->get_session_id()) == session_id )
+		{
+			found = true;
+			iter = i;
+		}
+	}
+	pthread_mutex_unlock( &robots_mutex );
+	return found;
 } // end of find_robot()
 
 
-bool send_or_push( char *msgbuf, robot *myrobot, long recipient_id ) {
-  unsigned char len = strlen(msgbuf);
-  string p(msgbuf);
-  list<robot_p>::iterator bot;
+bool send_or_push( char *msgbuf, robot *myrobot, long recipient_id )
+{
+	unsigned char len = strlen(msgbuf);
+	string p(msgbuf);
+	list<robot_p>::iterator bot;
 
-  if (find_robot( recipient_id, bot )) {
-      if(recipient_id != myrobot->get_session_id()){
-        (*bot)->push_msg(p);
-	push_paint("PUSHED", p, recipient_id, (*bot)->get_name());
-      }else{
-       if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1){
-        //cerr << "**error> failed to send message" << endl;
-        push_paint("ERROR", "failed to send message", myrobot->get_session_id(), (*bot)->get_name());
-        return false;
-       }else{
-	push_paint("SENT", msgbuf, recipient_id, (*bot)->get_name());
-       }
-      }
-  }else{
-    // Robot not found
-  }
+	if (find_robot( recipient_id, bot ))
+	{
+		if(recipient_id != myrobot->get_session_id())
+		{
+			(*bot)->push_msg(p);
+			push_paint("PUSHED", p, recipient_id, (*bot)->get_name());
+		}
+		else
+		{
+			if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1)
+			{
+				//cerr << "**error> failed to send message" << endl;
+				push_paint("ERROR", "failed to send message", myrobot->get_session_id(), (*bot)->get_name());
+				return false;
+			}
+			else
+			{
+				if(PluginManager->hooked("OUTGOING"))
+				{
+					PluginManager->outgoing(msgbuf);
+				}
+				push_paint("SENT", msgbuf, recipient_id, (*bot)->get_name());
+			}
+		}
+	}
+	else
+	{
+		// Robot not found
+	}
 
-  return true;
+	return true;
 }
 
 
-int init_client( char *msgbuf, robot *myrobot) {
-  unsigned char len;
-  string command;
-  string type;
-  string name;
-  int num_provides;
-  string provides;
+int init_client( char *msgbuf, robot *myrobot)
+{
+	unsigned char len;
+	string command;
+	string type;
+	string name;
+	int num_provides;
+	string provides;
 
-  char *ptr = NULL;
+	char *ptr = NULL;
 
-  if (( comm->read_msg( myrobot->get_sock(), len, &ptr ) == -1 ) || (ptr == NULL)) {
-    //cout << "**error> reading message in client_handler" << endl;
-    push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in init_client",
-	    myrobot->get_session_id(), myrobot->get_name());
-    return STATE_QUIT;
-  }
-  else {
-    //strcpy( msgbuf,ptr );
-  }
+	if (( comm->read_msg( myrobot->get_sock(), len, &ptr ) == -1 ) || (ptr == NULL))
+	{
+		//cout << "**error> reading message in client_handler" << endl;
+		push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in init_client",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		//strcpy( msgbuf,ptr );
+	}
 
-  string p(ptr);
-  stringstream istream(p);
+	string p(ptr);
+	stringstream istream(p);
 
-  istream >> command;
-  if(command != "INIT"){
-      free(ptr);
-    return STATE_QUIT;
-  }else{
-      istream >> type >> name >> num_provides;
-      if(!istream){
-	return STATE_QUIT;
-	  free(ptr);
-      }
-  }
+	if(PluginManager->hooked("INCOMING"))
+	{
+		PluginManager->incoming(p.c_str());
+	}
+
+	istream >> command;
+
+	if(command != "INIT")
+	{
+		free(ptr);
+		return STATE_QUIT;
+	}
+	else
+	{
+		istream >> type >> name >> num_provides;
+		if(!istream)
+		{
+			return STATE_QUIT;
+			free(ptr);
+		}
+	}
 
 
-  myrobot->set_type_id(type.c_str());
-  myrobot->set_name(name.c_str());
+	myrobot->set_type_id(type.c_str());
+	myrobot->set_name(name.c_str());
 
-  for (int i = 0; i < num_provides; ++i) {
-     istream >> provides;
-	  myrobot->add_to_provides(provides);
-  }
+	for (int i = 0; i < num_provides; ++i)
+	{
+		istream >> provides;
+		myrobot->add_to_provides(provides);
+	}
 
-  push_paint("RECIEVED", ptr, myrobot->get_session_id(), myrobot->get_name());
+	push_paint("RECIEVED", ptr, myrobot->get_session_id(), myrobot->get_name());
 
-  free(ptr);
+	free(ptr);
 
-  return STATE_ACK;
+	return STATE_ACK;
 }
 
-int ack_client( char *msgbuf, robot *myrobot) {
-  unsigned char len;
+int ack_client( char *msgbuf, robot *myrobot)
+{
+	unsigned char len;
 
-  long session_id = myrobot->get_session_id();
-  string ack = CMD_ACK;
-  stringstream convert;
+	long session_id = myrobot->get_session_id();
+	string ack = CMD_ACK;
+	stringstream convert;
 
-  convert << session_id;
+	convert << session_id;
 
-  ack += " ";
-  ack += convert.str();
-  len = strlen(ack.c_str());
+	ack += " ";
+	ack += convert.str();
+	len = strlen(ack.c_str());
 
-  if (( comm->send_msg( myrobot->get_sock(), len, ack.c_str() ) == -1 )) {
-    push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in ack_client",
-	    myrobot->get_session_id(), myrobot->get_name());
-    return STATE_QUIT;
-  }else{
-	push_paint("SENT", ack, myrobot->get_session_id(), myrobot->get_name());
-  }
+	if (( comm->send_msg( myrobot->get_sock(), len, ack.c_str() ) == -1 ))
+	{
+		push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in ack_client",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("OUTGOING"))
+		{
+			PluginManager->outgoing(ack.c_str());
+		}
+		push_paint("SENT", ack, myrobot->get_session_id(), myrobot->get_name());
+	}
 
-  return STATE_IDLE;
+	return STATE_IDLE;
 }
 
 
-int client_idle( char *msgbuf, robot *myrobot) {
-  int sockfd = myrobot->get_sock();
-  int ret = 0;
-  timeval timeout;
-  fd_set rset;
+int client_idle( char *msgbuf, robot *myrobot)
+{
+	int sockfd = myrobot->get_sock();
+	int ret = 0;
+	timeval timeout;
+	fd_set rset;
 
-  for(;;){
-      if ( !myrobot->msg_empty()){
-	return STATE_PROC_CMD;
-      }
-      else {
-        FD_ZERO(&rset);
-        FD_SET(sockfd, &rset);
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 100;
+	for(;;)
+	{
+		if ( !myrobot->msg_empty())
+		{
+			return STATE_PROC_CMD;
+		}
+		else
+		{
+			FD_ZERO(&rset);
+			FD_SET(sockfd, &rset);
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 100;
 
-	if( (ret = select(sockfd + 1, &rset, NULL, NULL, &timeout)) == -1){
-	  perror("select: ");
-	  return STATE_ERROR;
-	}else if(ret > 0){
-	  if(FD_ISSET(sockfd, &rset)){
-	    return STATE_PROC_CMD;
-	  }
+			if( (ret = select(sockfd + 1, &rset, NULL, NULL, &timeout)) == -1)
+			{
+				perror("select: ");
+				return STATE_ERROR;
+			}
+			else if(ret > 0)
+			{
+				if(FD_ISSET(sockfd, &rset))
+				{
+					return STATE_PROC_CMD;
+				}
+
+			}
+		}
 
 	}
-      }
 
-  }
+	//cout << "ERROR!" << endl;
+	push_paint("ERROR", "client_idle: should have not reached here",
+			   myrobot->get_session_id(), myrobot->get_name());
 
-  //cout << "ERROR!" << endl;
-  push_paint("ERROR", "client_idle: should have not reached here",
-	  myrobot->get_session_id(), myrobot->get_name());
-
-  return STATE_ERROR;
+	return STATE_ERROR;
 }
 
-int proc_cmd( char *msgbuf, robot *myrobot) {
-  unsigned char len;
-  string command;
-  string que_msg = myrobot->pop_msg();
-  char *ptr = NULL;
+int proc_cmd( char *msgbuf, robot *myrobot)
+{
+	unsigned char len;
+	string command;
+	string que_msg = myrobot->pop_msg();
+	char *ptr = NULL;
 
-  if(que_msg != ""){
-    //cout << "Got from Que" << endl;
+	if(que_msg != "")
+	{
+		//cout << "Got from Que" << endl;
 
-    if(PluginManager->hooked("INCOMING")){
+		if(PluginManager->hooked("INCOMING"))
+		{
+			PluginManager->incoming(que_msg.c_str());
+		}
 
-    }
+		push_paint("POPPED", que_msg.c_str(), myrobot->get_session_id(), myrobot->get_name());
+		strcpy( msgbuf, que_msg.c_str() );
+	}
+	else if (( comm->read_msg( myrobot->get_sock(), len, &ptr ) == -1 ) || (ptr == NULL))
+	{
+		//cout << "**error> reading message in client_handler" << endl;
+		push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in proc_cmd",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("INCOMING"))
+		{
+			PluginManager->incoming(ptr);
+		}
 
-    push_paint("POPPED", que_msg.c_str(), myrobot->get_session_id(), myrobot->get_name());
-    strcpy( msgbuf, que_msg.c_str() );
-  }
-  else if (( comm->read_msg( myrobot->get_sock(), len, &ptr ) == -1 ) || (ptr == NULL)) {
-    //cout << "**error> reading message in client_handler" << endl;
-    push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in proc_cmd",
-	    myrobot->get_session_id(), myrobot->get_name());
-    return STATE_QUIT;
-  }
-  else{
-    if(PluginManager->hooked("INCOMING")){
+		push_paint("RECIEVED", ptr, myrobot->get_session_id(), myrobot->get_name());
+		strcpy( msgbuf,ptr );
+	}
 
-    }
+	/*if(ptr){
+	    free(ptr);
+	}*/
 
-    push_paint("RECIEVED", ptr, myrobot->get_session_id(), myrobot->get_name());
-    strcpy( msgbuf,ptr );
-  }
+	string p(msgbuf);
+	stringstream istream(p);
+	//cout << "PROC Got string: " << p << endl;
 
-  /*if(ptr){
-      free(ptr);
-  }*/
+	istream >> command;
 
-  string p(msgbuf);
-  stringstream istream(p);
-  //cout << "PROC Got string: " << p << endl;
+	if(command == CMD_PING)
+	{
+		//cout << "Calling pong state";
+		return STATE_PONG;
 
-  istream >> command;
-  
-  if(command == CMD_PING){
-    //cout << "Calling pong state";
-    return STATE_PONG;
+	}
+	else if(command == CMD_PONG)
+	{
+		return STATE_PING;
 
-  }else if(command == CMD_PONG){
-    return STATE_PING;
+	}
+	else if(command == CMD_QUIT)
+	{
+		return STATE_QUIT;
 
-  }else if(command == CMD_QUIT){
-    return STATE_QUIT;
+	}
+	else if(command == CMD_IDENT)
+	{
+		return STATE_IDENT;
 
-  }else if(command == CMD_IDENT){
-    return STATE_IDENT;
+	}
+	else if(command == CMD_LOCK)
+	{
+		return STATE_LOCK;
 
-  }else if(command == CMD_LOCK){
-    return STATE_LOCK;
+	}
+	else if(command == CMD_UNLOCK)
+	{
+		return STATE_UNLOCK;
 
-  }else if(command == CMD_UNLOCK){
-    return STATE_UNLOCK;
+	}
+	else if(command == CMD_MOVE)
+	{
+		return STATE_MOVE;
 
-  }else if(command == CMD_MOVE){
-    return STATE_MOVE;
+	}
+	else if(command == CMD_ASK_POSE)
+	{
+		return STATE_ASK_POSE;
 
-  }else if(command == CMD_ASK_POSE){
-    return STATE_ASK_POSE;
+	}
+	else if(command == CMD_GET_POSE)
+	{
+		return STATE_GET_POSE;
 
-  }else if(command == CMD_GET_POSE){
-    return STATE_GET_POSE;
+	}
+	else if(command == CMD_ASK_PLAYER)
+	{
+		return STATE_ASK_PLAYER;
 
-  }else if(command == CMD_ASK_PLAYER){
-    return STATE_ASK_PLAYER;
+	}
+	else if(command == CMD_GET_PLAYER)
+	{
+		return STATE_GET_PLAYER;
 
-  }else if(command == CMD_GET_PLAYER){
-    return STATE_GET_PLAYER;
+	}
+	else if(command == CMD_BROADCAST)
+	{
+		return STATE_BROADCAST;
 
-  }else if(command == CMD_BROADCAST){
-    return STATE_BROADCAST;
+	}
+	else if(command == CMD_FOUND)
+	{
+		return STATE_FOUND;
 
-  }else if(command == CMD_FOUND){
-    return STATE_FOUND;
+	}
+	else
+	{
+		return STATE_IDLE;
+	}
 
-  }else{
-    return STATE_IDLE;
-  }
-
-  // should not reach here
-  //cout << "Should not of reached this!" << endl;
-  push_paint("ERROR", "proc_cmd: should have not reached here",
-	  myrobot->get_session_id(), myrobot->get_name());
-  return STATE_ERROR;
+	// should not reach here
+	//cout << "Should not of reached this!" << endl;
+	push_paint("ERROR", "proc_cmd: should have not reached here",
+			   myrobot->get_session_id(), myrobot->get_name());
+	return STATE_ERROR;
 }
 
 
-int client_ping( char *msgbuf, robot *myrobot) {
+int client_ping( char *msgbuf, robot *myrobot)
+{
 
-  return STATE_PONG;
-
-}
-
-int client_pong( char *msgbuf, robot *myrobot) {
-  //cout << "In PONG" << endl;
-
-  unsigned char len;
-  string pong = CMD_PONG;
-
-  len = strlen(pong.c_str());
-  strncpy(msgbuf, pong.c_str(), len);
-
-  if (( comm->send_msg( myrobot->get_sock(), len, msgbuf ) == -1 )) {
-    //cout << "**error> reading message in client_handler" << endl;
-    push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in client_pong",
-	    myrobot->get_session_id(), myrobot->get_name());
-    return STATE_QUIT;
-  }else{
-	push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-  }
-
-  return STATE_IDLE;
-
-}
-
-int client_broadcast( char *msgbuf, robot *myrobot) {
-
-  char *tmpbuf = msgbuf;
-
-  while(*tmpbuf != ' '){
-    ++tmpbuf;
-  }
-
-  ++tmpbuf;
-
-  pthread_mutex_lock( &robots_mutex );
-
-  for (list<robot_p>::iterator i = robots.begin();
-	  i != robots.end(); ++i) { 
-	  (*i)->push_msg(tmpbuf);
-	push_paint("PUSHED", tmpbuf, myrobot->get_session_id(), myrobot->get_name());
-  
-  }
-
-  pthread_mutex_unlock( &robots_mutex );
-
-  return STATE_IDLE;
-}
-
-int client_found( char *msgbuf, robot *myrobot) {
-  unsigned char len = strlen(msgbuf);
-
-  if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1){
-    push_paint("ERROR", "failed to send message",
-	    myrobot->get_session_id(), myrobot->get_name());
-      //cerr << "**error> failed to send message" << endl;
-      return STATE_QUIT;
-  }else{
-    push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-  }
-
-  return STATE_IDLE;
+	return STATE_PONG;
 
 }
 
-int client_lock( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
+int client_pong( char *msgbuf, robot *myrobot)
+{
+	//cout << "In PONG" << endl;
 
-  //cout << "Read lock command: " << p << endl;
-  istream >> command >> session_id;
+	unsigned char len;
+	string pong = CMD_PONG;
 
-  if (send_or_push(msgbuf, myrobot, session_id)) {
-      return STATE_IDLE;
-  } else {
-      return STATE_QUIT;
-  }
+	len = strlen(pong.c_str());
+	strncpy(msgbuf, pong.c_str(), len);
+
+	if (( comm->send_msg( myrobot->get_sock(), len, msgbuf ) == -1 ))
+	{
+		//cout << "**error> reading message in client_handler" << endl;
+		push_paint("ERROR", "CLOSING REMOTE CONNECTION: Failed to read from socket in client_pong",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("OUTGOING"))
+		{
+			PluginManager->outgoing(msgbuf);
+		}
+		push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+	}
+
+	return STATE_IDLE;
+
 }
 
-int client_unlock( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
+int client_broadcast( char *msgbuf, robot *myrobot)
+{
 
-  istream >> command >> session_id;
+	char *tmpbuf = msgbuf;
 
-  if (send_or_push(msgbuf, myrobot, session_id)) {
-      return STATE_IDLE;
-  } else {
-      return STATE_QUIT;
-  }
+	while(*tmpbuf != ' ')
+	{
+		++tmpbuf;
+	}
+
+	++tmpbuf;
+
+	pthread_mutex_lock( &robots_mutex );
+
+	for (list<robot_p>::iterator i = robots.begin();
+			i != robots.end(); ++i)
+	{
+		(*i)->push_msg(tmpbuf);
+		push_paint("PUSHED", tmpbuf, myrobot->get_session_id(), myrobot->get_name());
+
+	}
+
+	pthread_mutex_unlock( &robots_mutex );
+
+	return STATE_IDLE;
 }
 
-//#define CMD_IDENT    "IDENT"   // IDENT <num-robots> [ <robot_id> <name> 
+int client_found( char *msgbuf, robot *myrobot)
+{
+	unsigned char len = strlen(msgbuf);
+
+	if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1)
+	{
+		push_paint("ERROR", "failed to send message",
+				   myrobot->get_session_id(), myrobot->get_name());
+		//cerr << "**error> failed to send message" << endl;
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("OUTGOING"))
+		{
+			PluginManager->outgoing(msgbuf);
+		}
+		push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+	}
+
+	return STATE_IDLE;
+
+}
+
+int client_lock( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
+
+	//cout << "Read lock command: " << p << endl;
+	istream >> command >> session_id;
+
+	if (send_or_push(msgbuf, myrobot, session_id))
+	{
+		return STATE_IDLE;
+	}
+	else
+	{
+		return STATE_QUIT;
+	}
+}
+
+int client_unlock( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
+
+	istream >> command >> session_id;
+
+	if (send_or_push(msgbuf, myrobot, session_id))
+	{
+		return STATE_IDLE;
+	}
+	else
+	{
+		return STATE_QUIT;
+	}
+}
+
+//#define CMD_IDENT    "IDENT"   // IDENT <num-robots> [ <robot_id> <name>
 // <type> <num-provides> <provides>
-int client_ident( char *msgbuf, robot *myrobot) {
-  string msg = CMD_IDENT;
-  stringstream convert;
-  unsigned char len;
+int client_ident( char *msgbuf, robot *myrobot)
+{
+	string msg = CMD_IDENT;
+	stringstream convert;
+	unsigned char len;
 
-  //cout << "In IDENT" << endl;
+	//cout << "In IDENT" << endl;
 
-  pthread_mutex_lock( &robots_mutex );
-  msg += " ";
-  convert << robots.size() - 1;
-  msg += convert.str();
-  for (list<robot_p>::iterator i = robots.begin();
-       i != robots.end(); ++i) {
-    if((*i)->get_session_id() != myrobot->get_session_id()){
-        msg += " ";
-        convert.str("");
-	convert << (*i)->get_session_id();
+	pthread_mutex_lock( &robots_mutex );
+	msg += " ";
+	convert << robots.size() - 1;
 	msg += convert.str();
-	msg += " ";
-	msg += (*i)->get_name();
-	msg += " ";
-	msg += (*i)->get_type_id();
-	msg += " ";
-        convert.str("");
-	convert << (*i)->get_num_of_provides();
-	msg += convert.str();
-	vector<string> provides = (*i)->get_provides();
-	for (unsigned int i = 0; i < provides.size(); ++i) {
-	    msg += " " + provides[i];
+	for (list<robot_p>::iterator i = robots.begin();
+			i != robots.end(); ++i)
+	{
+		if((*i)->get_session_id() != myrobot->get_session_id())
+		{
+			msg += " ";
+			convert.str("");
+			convert << (*i)->get_session_id();
+			msg += convert.str();
+			msg += " ";
+			msg += (*i)->get_name();
+			msg += " ";
+			msg += (*i)->get_type_id();
+			msg += " ";
+			convert.str("");
+			convert << (*i)->get_num_of_provides();
+			msg += convert.str();
+			vector<string> provides = (*i)->get_provides();
+			for (unsigned int i = 0; i < provides.size(); ++i)
+			{
+				msg += " " + provides[i];
+			}
+		}
 	}
-    }
-  }
-  pthread_mutex_unlock( &robots_mutex );
+	pthread_mutex_unlock( &robots_mutex );
 
-  len = strlen(msg.c_str());
-  //cout << "Size is: " << (int) len << endl;
-  //cout << "Msg is: " << msg << endl;
-  strncpy(msgbuf, msg.c_str(), len);
+	len = strlen(msg.c_str());
+	//cout << "Size is: " << (int) len << endl;
+	//cout << "Msg is: " << msg << endl;
+	strncpy(msgbuf, msg.c_str(), len);
 
 
-  if (( comm->send_msg( myrobot->get_sock(), len, msgbuf ) == -1 )) {
-    //cout << "**error> reading message in client_handler" << endl;
-    push_paint("ERROR", "client_ident: reading message in client_handler",
-	    myrobot->get_session_id(), myrobot->get_name());
-    return STATE_QUIT;
-  }else{
-	push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-  }
+	if (( comm->send_msg( myrobot->get_sock(), len, msgbuf ) == -1 ))
+	{
+		//cout << "**error> reading message in client_handler" << endl;
+		push_paint("ERROR", "client_ident: reading message in client_handler",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("OUTGOING"))
+		{
+			PluginManager->outgoing(msgbuf);
+		}
+		push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+	}
 
 
-  return STATE_IDLE;
+	return STATE_IDLE;
 }
 
-int client_move( char *msgbuf, robot *myrobot) {
-  string command;
-  long session_id = -1;
-  string p(msgbuf);
-  stringstream istream(p);
+int client_move( char *msgbuf, robot *myrobot)
+{
+	string command;
+	long session_id = -1;
+	string p(msgbuf);
+	stringstream istream(p);
 
-  istream >> command >> session_id;
+	istream >> command >> session_id;
 
-  if(command != CMD_MOVE){
-    //cout << "This aint move!!!" << endl;
-    return STATE_IDLE;
-  }
-  if (send_or_push(msgbuf, myrobot, session_id)) {
-      return STATE_IDLE;
-  } else {
-      return STATE_QUIT;
-  }
+	if(command != CMD_MOVE)
+	{
+		//cout << "This aint move!!!" << endl;
+		return STATE_IDLE;
+	}
+	if (send_or_push(msgbuf, myrobot, session_id))
+	{
+		return STATE_IDLE;
+	}
+	else
+	{
+		return STATE_QUIT;
+	}
 }
 
-int client_error( char *msgbuf, robot *myrobot) {
+int client_error( char *msgbuf, robot *myrobot)
+{
 
-  //cout << "Got error, quitting" << endl;
-    push_paint("ERROR", "got error quitting ...",
-	    myrobot->get_session_id(), myrobot->get_name());
+	//cout << "Got error, quitting" << endl;
+	push_paint("ERROR", "got error quitting ...",
+			   myrobot->get_session_id(), myrobot->get_name());
 
-  return STATE_QUIT;
+	return STATE_QUIT;
 }
 
-int client_send_pose( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
-  ostringstream oss;
-  pose *temp = 0;
-  unsigned char len = 0;
+int client_send_pose( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
+	ostringstream oss;
+	pose *temp = 0;
+	unsigned char len = 0;
 
-  //cout << "Read global ask pose command: " << p << endl;
+	//cout << "Read global ask pose command: " << p << endl;
 
-  istream >> command >> session_id;
+	istream >> command >> session_id;
 
-  oss << "POSE";
-  oss << " ";
+	oss << "POSE";
+	oss << " ";
 
-  list<robot_p>::iterator i;
-  if(session_id < 0) {
-    ostringstream posestream;
-    int num_poses = 0;
-    for (i = robots.begin(); i != robots.end(); ++i) {
-       if ((*i)->get_type_id() != "gui") {
-          num_poses++;
-          posestream << " ";
-          session_id = (*i)->get_session_id();
-          posestream << session_id;
-          posestream << " ";
-          if ((temp = (*i)->get_pose())) {
-              posestream << temp->get_x() << " "
-                         << temp->get_y() << " "
-                         << temp->get_theta() << " "
-                         << temp->get_confidence();
-          } else {
-              posestream << " 0 0 0 0";
-          }
-       }
-    }
-    oss << num_poses << posestream.str();
-  } else if (find_robot(session_id, i) &&
-            ((*i)->get_type_id() != "gui")) {
-      oss << "1";
-      oss << " ";
-      session_id = (*i)->get_session_id();
-      oss << session_id;
-      oss << " ";
-      if ((temp = (*i)->get_pose())) {
-          oss << temp->get_x() << " "
-              << temp->get_y() << " "
-              << temp->get_theta() << " "
-              << temp->get_confidence();
-      } else {
-          oss << " 0 0 0 0";
-      }
-  } else {
-      oss << "0";
-  }
+	list<robot_p>::iterator i;
+	if(session_id < 0)
+	{
+		ostringstream posestream;
+		int num_poses = 0;
+		for (i = robots.begin(); i != robots.end(); ++i)
+		{
+			if ((*i)->get_type_id() != "gui")
+			{
+				num_poses++;
+				posestream << " ";
+				session_id = (*i)->get_session_id();
+				posestream << session_id;
+				posestream << " ";
+				if ((temp = (*i)->get_pose()))
+				{
+					posestream << temp->get_x() << " "
+							   << temp->get_y() << " "
+							   << temp->get_theta() << " "
+							   << temp->get_confidence();
+				}
+				else
+				{
+					posestream << " 0 0 0 0";
+				}
+			}
+		}
+		oss << num_poses << posestream.str();
+	}
+	else if (find_robot(session_id, i) &&
+			 ((*i)->get_type_id() != "gui"))
+	{
+		oss << "1";
+		oss << " ";
+		session_id = (*i)->get_session_id();
+		oss << session_id;
+		oss << " ";
+		if ((temp = (*i)->get_pose()))
+		{
+			oss << temp->get_x() << " "
+				<< temp->get_y() << " "
+				<< temp->get_theta() << " "
+				<< temp->get_confidence();
+		}
+		else
+		{
+			oss << " 0 0 0 0";
+		}
+	}
+	else
+	{
+		oss << "0";
+	}
 
-  //cerr << "**sending> " << oss.str() << endl;
-  strncpy( msgbuf, oss.str().c_str(), MAX_BUFFER-1 );
-  len = strlen(msgbuf);
-  if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1){
-      //cerr << "**error> failed to send message" << endl;
-    push_paint("ERROR", "failed to send message",
-	    myrobot->get_session_id(), myrobot->get_name());
-      return STATE_QUIT;
-  }else{
-	push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-  }
+	//cerr << "**sending> " << oss.str() << endl;
+	strncpy( msgbuf, oss.str().c_str(), MAX_BUFFER-1 );
+	len = strlen(msgbuf);
+	if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1)
+	{
+		//cerr << "**error> failed to send message" << endl;
+		push_paint("ERROR", "failed to send message",
+				   myrobot->get_session_id(), myrobot->get_name());
+		return STATE_QUIT;
+	}
+	else
+	{
+		if(PluginManager->hooked("OUTGOING"))
+		{
+			PluginManager->outgoing(msgbuf);
+		}
+		push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+	}
 
-  return STATE_IDLE;
+	return STATE_IDLE;
 }
 
-int client_ask_pose( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
-  
-  //cout << "Read ask pose command: " << p << endl;
-  istream >> command >> session_id;
+int client_ask_pose( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
 
-  if(myrobot->get_type_id() != "gui"){
-      if (send_or_push(msgbuf, myrobot, session_id)) {
-	  return STATE_IDLE;
-      } else {
-	  return STATE_QUIT;
-      }
-  }else{
-    return client_send_pose(msgbuf, myrobot);
-  }
+	//cout << "Read ask pose command: " << p << endl;
+	istream >> command >> session_id;
 
-  return STATE_IDLE;
-}
+	if(myrobot->get_type_id() != "gui")
+	{
+		if (send_or_push(msgbuf, myrobot, session_id))
+		{
+			return STATE_IDLE;
+		}
+		else
+		{
+			return STATE_QUIT;
+		}
+	}
+	else
+	{
+		return client_send_pose(msgbuf, myrobot);
+	}
 
-// POSE 1278614336 0 0 2.19397 0
-int client_get_pose( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
-  double x, y, theta, con;
-
-  istream >> command >> session_id >> x >> y >> theta >> con;
-
-  list<robot_p>::iterator bot;
-  if (find_robot(session_id, bot)) {
-    if(session_id != myrobot->get_session_id()){
-      (*bot)->push_msg(p);
-    }else{
-      myrobot->set_pose(x, y, theta, con);
-    }
-  }
-
-  return STATE_IDLE;
-}
-
-int client_ask_player( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command;
-  long session_id;
-  unsigned char len = strlen(msgbuf);
-  //cout << "Read ASK player command: " << p << endl;
-  istream >> command >> session_id;
-  ostringstream oss;
-
-
-  list<robot_p>::iterator bot;
-
-  if (find_robot(session_id, bot)) {
-    if(session_id != myrobot->get_session_id()){
-      string cmd = command + " ";
-      oss << session_id;
-      cmd += oss.str();
-      cmd += " ";
-      oss.str("");
-      oss << myrobot->get_session_id();
-      cmd += oss.str();
-      //cout << "Pusing PLAYER CMD: " << cmd << endl;
-      (*bot)->push_msg(cmd.c_str());
-    }else{
-      len = strlen(msgbuf);
-      if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1){
-	push_paint("ERROR", "failed to send message",
-		myrobot->get_session_id(), myrobot->get_name());
-	  //cerr << "**error> failed to send message" << endl;
-	  return STATE_QUIT;
-      }else{
-	push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-      }
-
-    }
-  }else{
-    //cout << "ASKPOSE: Robot not found" << endl;
-    // shoud appened robot_id
-    push_paint("ERROR", "client_ask_player: robot not found",
-	    myrobot->get_session_id(), myrobot->get_name());
-  }
-
-  return STATE_IDLE;
-
+	return STATE_IDLE;
 }
 
 // POSE 1278614336 0 0 2.19397 0
-int client_get_player( char *msgbuf, robot *myrobot) {
-  string p(msgbuf);
-  stringstream istream(p);
-  string command, ip;
-  long session_id, requestor_id;
-  int port;
-  unsigned char len = 0;
+int client_get_pose( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
+	double x, y, theta, con;
 
+	istream >> command >> session_id >> x >> y >> theta >> con;
 
-  istream >> command >> requestor_id >> session_id >> ip >> port;
+	list<robot_p>::iterator bot;
+	if (find_robot(session_id, bot))
+	{
+		if(session_id != myrobot->get_session_id())
+		{
+			(*bot)->push_msg(p);
+		}
+		else
+		{
+			myrobot->set_pose(x, y, theta, con);
+		}
+	}
 
-  list<robot_p>::iterator bot;
-
-  if (find_robot(requestor_id, bot)) {
-    if(requestor_id != myrobot->get_session_id()){
-      (*bot)->push_msg(p);
-    }else{
-      len = strlen(msgbuf);
-      //cout << "Sending off player info to GUI: " << myrobot->get_session_id() << endl;
-
-      if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1){
-	push_paint("ERROR", "failed to send message",
-		myrobot->get_session_id(), myrobot->get_name());
-	//      cerr << "**error> failed to send message" << endl;
-	      return STATE_QUIT;
-      }else{
-	push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
-      }
-
-      return STATE_IDLE;
-
-    }
-
-    push_paint("ERROR", "client_ask_player: robot not found",
-	    myrobot->get_session_id(), myrobot->get_name());
-    //cout << "Robot not found" << endl;
-  }
-
-  return STATE_IDLE;
+	return STATE_IDLE;
 }
 
-void *posebeat( void *arg ) {
-  string p;
-  string command = "ASKPOSE";
-  long session_id;
-  ostringstream oss;
+int client_ask_player( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command;
+	long session_id;
+	unsigned char len = strlen(msgbuf);
+	//cout << "Read ASK player command: " << p << endl;
+	istream >> command >> session_id;
+	ostringstream oss;
 
-  for (;;) {
-    //cout << "Asking for new poses ... " << endl;
-    pthread_mutex_lock( &robots_mutex );
 
-    for (list<robot_p>::iterator i = robots.begin();
-         i != robots.end(); ++i) {
+	list<robot_p>::iterator bot;
+
+	if (find_robot(session_id, bot))
+	{
+		if(session_id != myrobot->get_session_id())
+		{
+			string cmd = command + " ";
+			oss << session_id;
+			cmd += oss.str();
+			cmd += " ";
+			oss.str("");
+			oss << myrobot->get_session_id();
+			cmd += oss.str();
+			//cout << "Pusing PLAYER CMD: " << cmd << endl;
+			(*bot)->push_msg(cmd.c_str());
+		}
+		else
+		{
+			len = strlen(msgbuf);
+			if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1)
+			{
+				push_paint("ERROR", "failed to send message",
+						   myrobot->get_session_id(), myrobot->get_name());
+				//cerr << "**error> failed to send message" << endl;
+				return STATE_QUIT;
+			}
+			else
+			{
+				if(PluginManager->hooked("OUTGOING"))
+				{
+					PluginManager->outgoing(msgbuf);
+				}
+				push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+			}
+
+		}
+	}
+	else
+	{
+		//cout << "ASKPOSE: Robot not found" << endl;
+		// shoud appened robot_id
+		push_paint("ERROR", "client_ask_player: robot not found",
+				   myrobot->get_session_id(), myrobot->get_name());
+	}
+
+	return STATE_IDLE;
+
+}
+
+// POSE 1278614336 0 0 2.19397 0
+int client_get_player( char *msgbuf, robot *myrobot)
+{
+	string p(msgbuf);
+	stringstream istream(p);
+	string command, ip;
+	long session_id, requestor_id;
+	int port;
+	unsigned char len = 0;
+
+
+	istream >> command >> requestor_id >> session_id >> ip >> port;
+
+	list<robot_p>::iterator bot;
+
+	if (find_robot(requestor_id, bot))
+	{
+		if(requestor_id != myrobot->get_session_id())
+		{
+			(*bot)->push_msg(p);
+		}
+		else
+		{
+			len = strlen(msgbuf);
+			//cout << "Sending off player info to GUI: " << myrobot->get_session_id() << endl;
+
+			if(comm->send_msg( myrobot->get_sock(), len, msgbuf) == -1)
+			{
+				push_paint("ERROR", "failed to send message",
+						   myrobot->get_session_id(), myrobot->get_name());
+				//      cerr << "**error> failed to send message" << endl;
+				return STATE_QUIT;
+			}
+			else
+			{
+				if(PluginManager->hooked("OUTGOING"))
+				{
+					PluginManager->outgoing(msgbuf);
+				}
+				push_paint("SENT", msgbuf, myrobot->get_session_id(), myrobot->get_name());
+			}
+
+			return STATE_IDLE;
+
+		}
+
+		push_paint("ERROR", "client_ask_player: robot not found",
+				   myrobot->get_session_id(), myrobot->get_name());
+		//cout << "Robot not found" << endl;
+	}
+
+	return STATE_IDLE;
+}
+
+void *posebeat( void *arg )
+{
+	string p;
+	string command = "ASKPOSE";
+	long session_id;
+	ostringstream oss;
+
+	for (;;)
+	{
+		//cout << "Asking for new poses ... " << endl;
+		pthread_mutex_lock( &robots_mutex );
+
+		for (list<robot_p>::iterator i = robots.begin();
+				i != robots.end(); ++i)
+		{
 //      if((*i)->get_type_id() != "gui" && (*i)->get_type() != ""){
-      if((*i)->get_type_id() != "gui"){
-	  session_id = (*i)->get_session_id();
-	  oss << session_id;
-	  p += command;
-	  p += " ";
-	  p += oss.str();
-	  push_paint("PUSHED", p, (*i)->get_session_id(), (*i)->get_name());
-	  (*i)->push_msg(p);
-	  p = "";
-	  oss.str("");
+			if((*i)->get_type_id() != "gui")
+			{
+				session_id = (*i)->get_session_id();
+				oss << session_id;
+				p += command;
+				p += " ";
+				p += oss.str();
+				PluginManager->incoming("PUSHED");
+				push_paint("PUSHED", p, (*i)->get_session_id(), (*i)->get_name());
+				(*i)->push_msg(p);
+				p = "";
+				oss.str("");
+			}
+		}
+
+		pthread_mutex_unlock( &robots_mutex );
+
+		sleep(1);
 	}
-    }
-
-    pthread_mutex_unlock( &robots_mutex );
-
-    sleep(1);
-  }
 }
 
 
@@ -762,111 +952,118 @@ void *posebeat( void *arg ) {
  *                                                                          +-send-moving(me)-+
  *
  */
-void *client_handler( void *arg ) {
+void *client_handler( void *arg )
+{
 
-  robot *myrobot = (robot *)arg;
-  int state;
-  char *msgbuf = (char *)malloc( MAX_BUFFER*sizeof(char) );
-  char *pmsg   = (char *)malloc( MAX_BUFFER*sizeof(char) );
-  char *pargs  = (char *)malloc( MAX_BUFFER*sizeof(char) );
-  string msg;
+	robot *myrobot = (robot *)arg;
+	int state;
+	char *msgbuf = (char *)malloc( MAX_BUFFER*sizeof(char) );
+	char *pmsg   = (char *)malloc( MAX_BUFFER*sizeof(char) );
+	char *pargs  = (char *)malloc( MAX_BUFFER*sizeof(char) );
+	string msg;
 
-  int command = -1;
+	int command = -1;
 
-  // save this thread_id
-  myrobot->set_thread_id( pthread_self() );
+	// save this thread_id
+	myrobot->set_thread_id( pthread_self() );
 
-  state = STATE_INIT;
+	state = STATE_INIT;
 
-  bool fDone = false;
-  while(!fDone){
-    switch( state ) {
-	case STATE_INIT:
-	    command = STATE_INIT;
-	    break;
-	case STATE_QUIT:
-        fDone = true;
-        command = -1;
-	    break;
-	case STATE_ACK:
-	    command = STATE_ACK;
-	    break;
-	case STATE_IDLE:
-	    command = STATE_IDLE;
-	    break;
-	case STATE_PROC_CMD:
-	    command = STATE_PROC_CMD;
-	    break;
-	case STATE_PING:
-	    command = STATE_PING;
-	    break;
-	case STATE_PONG:
-	    command = STATE_PONG;
-	    break;
-	case STATE_IDENT:
-	    command = STATE_IDENT;
-	    break;
-	case STATE_LOCK:
-	    command = STATE_LOCK;
-	    break;
-	case STATE_UNLOCK:
-	    command = STATE_UNLOCK;
-	    break;
-	case STATE_ASK_POSE:
-	    command = STATE_ASK_POSE;
-	    break;
-	case STATE_GET_POSE:
-	    command = STATE_GET_POSE;
-	    break;
-	case STATE_ASK_PLAYER:
-	    command = STATE_ASK_PLAYER;
-	    break;
-	case STATE_GET_PLAYER:
-	    command = STATE_GET_PLAYER;
-	    break;
-	case STATE_MOVE:
-	    command = STATE_MOVE;
-	    break;
-	case STATE_BROADCAST:
-	    command = STATE_BROADCAST;
-	    break;
-	case STATE_FOUND:
-	    command = STATE_FOUND;
-	    break;
-	default:
-	    //cout << "State was: " << state << endl;
-	    push_paint("ERROR", "Invalid State", myrobot->get_session_id(), myrobot->get_name());
-	    command = STATE_ERROR;
-	    break;
-    }
+	bool fDone = false;
+	while(!fDone)
+	{
+		switch( state )
+		{
+		case STATE_INIT:
+			command = STATE_INIT;
+			break;
+		case STATE_QUIT:
+			fDone = true;
+			command = -1;
+			break;
+		case STATE_ACK:
+			command = STATE_ACK;
+			break;
+		case STATE_IDLE:
+			command = STATE_IDLE;
+			break;
+		case STATE_PROC_CMD:
+			command = STATE_PROC_CMD;
+			break;
+		case STATE_PING:
+			command = STATE_PING;
+			break;
+		case STATE_PONG:
+			command = STATE_PONG;
+			break;
+		case STATE_IDENT:
+			command = STATE_IDENT;
+			break;
+		case STATE_LOCK:
+			command = STATE_LOCK;
+			break;
+		case STATE_UNLOCK:
+			command = STATE_UNLOCK;
+			break;
+		case STATE_ASK_POSE:
+			command = STATE_ASK_POSE;
+			break;
+		case STATE_GET_POSE:
+			command = STATE_GET_POSE;
+			break;
+		case STATE_ASK_PLAYER:
+			command = STATE_ASK_PLAYER;
+			break;
+		case STATE_GET_PLAYER:
+			command = STATE_GET_PLAYER;
+			break;
+		case STATE_MOVE:
+			command = STATE_MOVE;
+			break;
+		case STATE_BROADCAST:
+			command = STATE_BROADCAST;
+			break;
+		case STATE_FOUND:
+			command = STATE_FOUND;
+			break;
+		default:
+			//cout << "State was: " << state << endl;
+			push_paint("ERROR", "Invalid State", myrobot->get_session_id(), myrobot->get_name());
+			command = STATE_ERROR;
+			break;
+		}
 
-    if( command >= 0) {
-      state = (*function_array[command])(msgbuf, myrobot);
-    }else{
-      //do something
-    }
+		if( command >= 0)
+		{
+			state = (*function_array[command])(msgbuf, myrobot);
+		}
+		else
+		{
+			//do something
+		}
 
-    usleep(1); // give up some cpu time
-  }
+		usleep(1); // give up some cpu time
+	}
 
 
-  free(msgbuf);
-  free(pmsg);
-  free(pargs);
-  close( myrobot->get_sock() );
-  // get rid of the robot
-  list<robot_p>::iterator bot;
-  if (find_robot(myrobot->get_session_id(), bot)) {
-      pthread_mutex_lock( &robots_mutex );
-      robots.erase(bot);
-      pthread_mutex_unlock( &robots_mutex );
-  }
-  delete myrobot;
-  // adjust the thread count
-  pthread_mutex_lock( &threads_mutex );
-  num_threads--;
-  pthread_mutex_unlock( &threads_mutex );
-  pthread_exit( NULL );
+	free(msgbuf);
+	free(pmsg);
+	free(pargs);
+	close( myrobot->get_sock() );
+	// get rid of the robot
+	list<robot_p>::iterator bot;
+	if (find_robot(myrobot->get_session_id(), bot))
+	{
+		pthread_mutex_lock( &robots_mutex );
+		robots.erase(bot);
+		pthread_mutex_unlock( &robots_mutex );
+	}
+	delete myrobot;
+	// adjust the thread count
+	pthread_mutex_lock( &threads_mutex );
+	num_threads--;
+	pthread_mutex_unlock( &threads_mutex );
+	pthread_exit( NULL );
 } // end of client_handler()
 
 
@@ -875,156 +1072,177 @@ void *client_handler( void *arg ) {
  * main()
  *
  */
-int main( int argc, char *argv[] ) {
-  int ssock, csock;
-  pthread_t thread_id0, thread_id1, thread_id[MAX_THREADS]; // array of thread id's
-  struct sockaddr_in sin;
-  socklen_t slen = sizeof( sin );
+int main( int argc, char *argv[] )
+{
+	int ssock, csock;
+	pthread_t thread_id0, thread_id1, thread_id[MAX_THREADS]; // array of thread id's
+	struct sockaddr_in sin;
+	socklen_t slen = sizeof( sin );
 
-  int ch;
+	int ch;
 
-  thread_args *t_args = new thread_args;
+	thread_args *t_args = new thread_args;
 
-  bool ip_given = false;
-  bool port_given = false;
-  t_args->log_enabled = false;
-  t_args->interactive = true;
+	bool ip_given = false;
+	bool port_given = false;
+	t_args->log_enabled = false;
+	t_args->interactive = true;
 
-  if(argc < 2)
-    display_usage(argv[0]);
-
-  while ((ch = getopt (argc, argv, "tl:b:p:")) != -1){
-    switch(ch){
-	case 't':
-		t_args->interactive = false;
-		break;
-	    case 'l':
-		strncpy(t_args->logfile, optarg, sizeof(t_args->logfile));
-		t_args->log_enabled = true;
-		break;
-	    case 'b':
-		strncpy(t_args->ip, optarg, sizeof(t_args->ip));
-		ip_given = true;
-		break;
-	    case 'p':
-		t_args->port = atoi(optarg);
-		port_given = true;
-		break;
-	    default:
+	if(argc < 2)
 		display_usage(argv[0]);
-		exit(1);
-		break;
-    }
-  }
 
-  if(t_args->ip[0] == '\0'){
-    cerr << "error: ip address required" << endl;
-    display_usage(argv[0]);
-  }else if(t_args->port < 0){
-    cerr << "error: port required" << endl;
-    display_usage(argv[0]);
-  }
+	while ((ch = getopt (argc, argv, "tl:b:p:")) != -1)
+	{
+		switch(ch)
+		{
+		case 't':
+			t_args->interactive = false;
+			break;
+		case 'l':
+			strncpy(t_args->logfile, optarg, sizeof(t_args->logfile));
+			t_args->log_enabled = true;
+			break;
+		case 'b':
+			strncpy(t_args->ip, optarg, sizeof(t_args->ip));
+			ip_given = true;
+			break;
+		case 'p':
+			t_args->port = atoi(optarg);
+			port_given = true;
+			break;
+		default:
+			display_usage(argv[0]);
+			exit(1);
+			break;
+		}
+	}
 
-  // initialize list of robots
-  robots.clear();
+	if(t_args->ip[0] == '\0')
+	{
+		cerr << "error: ip address required" << endl;
+		display_usage(argv[0]);
+	}
+	else if(t_args->port < 0)
+	{
+		cerr << "error: port required" << endl;
+		display_usage(argv[0]);
+	}
 
-  function_array[STATE_INIT] = &init_client;
-  function_array[STATE_ACK] = &ack_client;
-  function_array[STATE_IDLE] = &client_idle;
-  function_array[STATE_PONG] = &client_pong;
-  function_array[STATE_PING] = &client_ping;
-  function_array[STATE_PROC_CMD] = &proc_cmd;
-  function_array[STATE_IDENT] = &client_ident;
-  function_array[STATE_MOVE] = &client_move;
-  function_array[STATE_ERROR] = &client_error;
-  function_array[STATE_LOCK] = &client_lock;
-  function_array[STATE_UNLOCK] = &client_unlock;
-  function_array[STATE_ASK_POSE] = &client_ask_pose;
-  function_array[STATE_GET_POSE] = &client_get_pose;
-  function_array[STATE_ASK_PLAYER] = &client_ask_player;
-  function_array[STATE_GET_PLAYER] = &client_get_player;
-  function_array[STATE_BROADCAST] = &client_broadcast;
-  function_array[STATE_FOUND] = &client_found;
-  
-  // NCURSES setup
-  if(t_args->interactive){
-    interactive_setup();
-  }
-  
-  // create server socket
-  comm = new commServer(t_args->ip, t_args->port);
-  
-  if(t_args->interactive){
-      if ( pthread_create( &thread_id0, NULL, &paintbrush, (void *)t_args )) {
-	perror( "**error> server/basic thread" );
-	exit( 1 );
-      }
-  }else{
-      if ( pthread_create( &thread_id0, NULL, &pencil, (void *)t_args )) {
-	perror( "**error> server/basic thread" );
-	exit( 1 );
-      }
-  }
+	// initialize list of robots
+	robots.clear();
 
-  if ( pthread_create( &thread_id1, NULL, &posebeat, NULL )) {
-    perror( "**error> server/basic thread" );
-    exit( 1 );
-  }
+	function_array[STATE_INIT] = &init_client;
+	function_array[STATE_ACK] = &ack_client;
+	function_array[STATE_IDLE] = &client_idle;
+	function_array[STATE_PONG] = &client_pong;
+	function_array[STATE_PING] = &client_ping;
+	function_array[STATE_PROC_CMD] = &proc_cmd;
+	function_array[STATE_IDENT] = &client_ident;
+	function_array[STATE_MOVE] = &client_move;
+	function_array[STATE_ERROR] = &client_error;
+	function_array[STATE_LOCK] = &client_lock;
+	function_array[STATE_UNLOCK] = &client_unlock;
+	function_array[STATE_ASK_POSE] = &client_ask_pose;
+	function_array[STATE_GET_POSE] = &client_get_pose;
+	function_array[STATE_ASK_PLAYER] = &client_ask_player;
+	function_array[STATE_GET_PLAYER] = &client_get_player;
+	function_array[STATE_BROADCAST] = &client_broadcast;
+	function_array[STATE_FOUND] = &client_found;
 
-  ssock = comm->get_sock();
+	// NCURSES setup
+	if(t_args->interactive)
+	{
+		interactive_setup();
+	}
 
-  // initialize mutex for shared robots array
-  pthread_mutex_init( &robots_mutex,NULL );
-  pthread_mutex_init( &threads_mutex,NULL );
+	// create server socket
+	comm = new commServer(t_args->ip, t_args->port);
 
-  while ( num_threads < MAX_THREADS ) {
-    // accept returns a socket descriptor for the accepted socket
-    if (( csock = accept( ssock,(struct sockaddr *)&sin, &slen )) == -1 ) {
-      perror( "**error> server/accept" );
-      exit( 1 );
-    }
+	if(t_args->interactive)
+	{
+		if ( pthread_create( &thread_id0, NULL, &paintbrush, (void *)t_args ))
+		{
+			perror( "**error> server/basic thread" );
+			exit( 1 );
+		}
+	}
+	else
+	{
+		if ( pthread_create( &thread_id0, NULL, &pencil, (void *)t_args ))
+		{
+			perror( "**error> server/basic thread" );
+			exit( 1 );
+		}
+	}
 
-    //fprintf( stdout,"server: socket created/listen/accepted\n" );
-    //fflush( stdout );
-    push_paint("STATUS", "ACCEPTED REMOTE CONNECTION", 0, "");
-    
-    // create an entry in the robots list for this client
-    robot_p rp = new robot();
-    if (rp == 0) {
-	//push_paint("STATUS", "**error> failed to create new robot", -1);
-        //cerr << "**error> failed to create new robot" << endl;
-	//print_error(output, "Failed to created new robot");
-    } else {
-        rp->set_session_id(time(0));
-        rp->set_sock(csock);
-	//push_paint("STATUS", "created new robot, id= x", -1);
-        //cout << "created new robot, id=" << rp->get_session_id() << endl;
-	//	rp->get_session_id() );
+	if ( pthread_create( &thread_id1, NULL, &posebeat, NULL ))
+	{
+		perror( "**error> server/basic thread" );
+		exit( 1 );
+	}
 
-        // create a new thread for this client
-        pthread_mutex_lock( &threads_mutex );
-        if ( pthread_create( &thread_id[num_threads], 
-	    		 NULL, 
-	    		 &client_handler, 
-	    		 (void *)rp )) {
-          printf( "**error> could not create thread for client_handler\n" );
-          delete rp;
-        }
-        else {
-          if (pthread_detach(thread_id[num_threads]) != 0) {
-             cerr << "**error> failed to detach thread" << endl;
-          }
-          num_threads++;
-          pthread_mutex_lock( &robots_mutex );
-          robots.push_back(rp);
-          pthread_mutex_unlock( &robots_mutex );
-        }
-        pthread_mutex_unlock( &threads_mutex );
-    }
-  } // end while
+	ssock = comm->get_sock();
 
-  // all done. pack up and go home.
-  delete comm;
-  return( 0 );
+	// initialize mutex for shared robots array
+	pthread_mutex_init( &robots_mutex,NULL );
+	pthread_mutex_init( &threads_mutex,NULL );
+
+	while ( num_threads < MAX_THREADS )
+	{
+		// accept returns a socket descriptor for the accepted socket
+		if (( csock = accept( ssock,(struct sockaddr *)&sin, &slen )) == -1 )
+		{
+			perror( "**error> server/accept" );
+			exit( 1 );
+		}
+
+		//fprintf( stdout,"server: socket created/listen/accepted\n" );
+		//fflush( stdout );
+		push_paint("STATUS", "ACCEPTED REMOTE CONNECTION", 0, "");
+
+		// create an entry in the robots list for this client
+		robot_p rp = new robot();
+		if (rp == 0)
+		{
+			//push_paint("STATUS", "**error> failed to create new robot", -1);
+			//cerr << "**error> failed to create new robot" << endl;
+			//print_error(output, "Failed to created new robot");
+		}
+		else
+		{
+			rp->set_session_id(time(0));
+			rp->set_sock(csock);
+			//push_paint("STATUS", "created new robot, id= x", -1);
+			//cout << "created new robot, id=" << rp->get_session_id() << endl;
+			//	rp->get_session_id() );
+
+			// create a new thread for this client
+			pthread_mutex_lock( &threads_mutex );
+			if ( pthread_create( &thread_id[num_threads],
+								 NULL,
+								 &client_handler,
+								 (void *)rp ))
+			{
+				printf( "**error> could not create thread for client_handler\n" );
+				delete rp;
+			}
+			else
+			{
+				if (pthread_detach(thread_id[num_threads]) != 0)
+				{
+					cerr << "**error> failed to detach thread" << endl;
+				}
+				num_threads++;
+				pthread_mutex_lock( &robots_mutex );
+				robots.push_back(rp);
+				pthread_mutex_unlock( &robots_mutex );
+			}
+			pthread_mutex_unlock( &threads_mutex );
+		}
+	} // end while
+
+	// all done. pack up and go home.
+	delete comm;
+	return( 0 );
 
 } // end of main()

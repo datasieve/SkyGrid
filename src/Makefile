@@ -1,7 +1,8 @@
 CPP           = g++
 CPPFLAGS      = -c -Wall -g
 LINK          = g++
-LDFLAGS_LINUX = -llua -lpthread -lncurses
+INCLUDES      = /usr/include/lua5.1/
+LDFLAGS_LINUX = -L/usr/lib -llua5.1 -lpthread -lncurses
 LDFLAGS       = $(LDFLAGS_LINUX)
 RM            = rm
 
@@ -10,7 +11,7 @@ RM            = rm
 .SUFFIXES: .o .cpp
 
 .cpp.o:
-	$(CPP) $(CPPFLAGS) $*.cpp -o $(SRC_DIR)$*.o
+	$(CPP) -I $(INCLUDES) $(CPPFLAGS) $*.cpp -o $(SRC_DIR)$*.o
 
 all: skygrid clone
 
