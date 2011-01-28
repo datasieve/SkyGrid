@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <regex.h>
 #include <signal.h>
-#include <ncursesw/ncurses.h>
+#include <ncurses.h>
 #include <string>
 #include <queue>
 #include <pthread.h>
